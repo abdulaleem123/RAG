@@ -1,0 +1,241 @@
+{
+  "projectMeta": {
+    "name": "RAG",
+    "domain": "Document Q&A; retrieval-augmented generation over custom knowledge bases",
+    "purpose": "Index documents (PDF or web), store in vector stores (Pinecone or FAISS), and answer user questions via retrieval and optional LLM generation",
+    "year": "",
+    "role": "",
+    "techStack": [
+      "Python",
+      "LangChain (community, text_splitters, google_genai, openai, pinecone, core, chat_models)",
+      "LangGraph (StateGraph)",
+      "Pinecone",
+      "FAISS",
+      "Google Gemini (text-embedding-004)",
+      "OpenAI (gpt-4.1-nano)",
+      "python-dotenv",
+      "PyPDFLoader / WebBaseLoader",
+      "RecursiveCharacterTextSplitter",
+      "MarkdownHeaderTextSplitter",
+      "Jupyter",
+      "bs4",
+      "pypdf"
+    ]
+  },
+
+  "problemStatement": {
+    "context": "Need to query specific documents (PDFs, web pages, or markdown) with natural language and get answers grounded in that content.",
+    "userPainPoints": [],
+    "existingSolutionsLimitations": []
+  },
+
+  "goalsAndMetrics": {
+    "goals": [],
+    "successMetrics": []
+  },
+
+  "userFlow": [
+    {
+      "step": "1",
+      "description": "User provides or system loads documents (PDF path, URL, or markdown)"
+    },
+    {
+      "step": "2",
+      "description": "Documents are split into chunks and embedded (Google Gemini)"
+    },
+    {
+      "step": "3",
+      "description": "Vectors are stored in Pinecone or FAISS"
+    },
+    {
+      "step": "4",
+      "description": "User asks a question (CLI input or notebook invoke)"
+    },
+    {
+      "step": "5",
+      "description": "System retrieves top-k similar chunks (similarity search)"
+    },
+    {
+      "step": "6",
+      "description": "In 007_rag.ipynb only: context + question are sent to LLM (gpt-4.1-nano); answer returned. In rag_doc.py: top snippets printed only."
+    }
+  ],
+
+  "systemArchitecture": {
+    "frontend": [],
+    "backend": [
+      "rag_doc.py: single script, CLI loop (stdin/print)",
+      "rag.ipynb: Jupyter cells for markdown → Pinecone indexing and similarity search",
+      "007_rag.ipynb: Jupyter cells for web/PDF load, split, FAISS, LangGraph RAG (retrieve → generator)"
+    ],
+    "services": [
+      "Pinecone (vector index, serverless AWS us-east-1)",
+      "Google Gemini (embeddings)",
+      "OpenAI (LLM in 007_rag.ipynb)"
+    ],
+    "databases": [
+      "Pinecone vector index (luxdit-paper-index, testing-pinecone-gemini)",
+      "FAISS local vector store (in-memory or load_local)"
+    ],
+    "externalIntegrations": [
+      "Pinecone API",
+      "Google Generative AI (embeddings)",
+      "OpenAI API (chat model)"
+    ]
+  },
+
+  "dataFlow": [
+    {
+      "from": "User / PDF / URL",
+      "to": "Document loaders (PyPDFLoader, WebBaseLoader)",
+      "data": "File path or URL, optional BS4 strainer",
+      "trigger": "Script run or notebook execution"
+    },
+    {
+      "from": "Document loaders",
+      "to": "Text splitters",
+      "data": "List of Document objects",
+      "trigger": "After load"
+    },
+    {
+      "from": "Text splitters",
+      "to": "Embedding model",
+      "data": "Chunk text",
+      "trigger": "Before vector store write"
+    },
+    {
+      "from": "Embedding model",
+      "to": "Pinecone or FAISS",
+      "data": "Vectors and metadata",
+      "trigger": "from_documents / add_documents or FAISS build"
+    },
+    {
+      "from": "User question",
+      "to": "Vector store",
+      "data": "Query string",
+      "trigger": "User input in CLI or graph.invoke"
+    },
+    {
+      "from": "Vector store",
+      "to": "Retrieve node / caller",
+      "data": "Top-k Document chunks (and optional scores)",
+      "trigger": "similarity_search or similarity_search_with_score"
+    },
+    {
+      "from": "Retrieve node",
+      "to": "Generator node",
+      "data": "State with question and context (doc list)",
+      "trigger": "LangGraph edge retrieve → generator"
+    },
+    {
+      "from": "Generator node",
+      "to": "User",
+      "data": "state['answer'] (LLM response content)",
+      "trigger": "graph.invoke in 007_rag.ipynb"
+    }
+  ],
+
+  "coreFeatures": [
+    {
+      "name": "PDF load and chunk",
+      "whatItDoes": "Loads a PDF and splits it into text chunks with overlap",
+      "implementationLocation": "rag_doc.py, 007_rag.ipynb",
+      "implementationSummary": "PyPDFLoader + RecursiveCharacterTextSplitter (chunk_size 1000, overlap 150 or 200)"
+    },
+    {
+      "name": "Web page load",
+      "whatItDoes": "Fetches and parses a URL into document chunks",
+      "implementationLocation": "007_rag.ipynb",
+      "implementationSummary": "WebBaseLoader with bs4 SoupStrainer (post-title, post-header, post-content)"
+    },
+    {
+      "name": "Markdown header split",
+      "whatItDoes": "Splits markdown by headers (#, ##, ###) with metadata",
+      "implementationLocation": "rag.ipynb",
+      "implementationSummary": "MarkdownHeaderTextSplitter with headers_to_split_on"
+    },
+    {
+      "name": "Google Gemini embeddings",
+      "whatItDoes": "Produces 768-dim embeddings for chunks and queries",
+      "implementationLocation": "rag_doc.py, rag.ipynb, 007_rag.ipynb",
+      "implementationSummary": "GoogleGenerativeAIEmbeddings(model='models/text-embedding-004')"
+    },
+    {
+      "name": "Pinecone index and upsert",
+      "whatItDoes": "Creates or reuses Pinecone index and stores vectors",
+      "implementationLocation": "rag_doc.py, rag.ipynb",
+      "implementationSummary": "Pinecone client, create_index (768 dim, cosine, ServerlessSpec), PineconeVectorStore.from_documents or add_documents"
+    },
+    {
+      "name": "FAISS vector store",
+      "whatItDoes": "Local vector index for similarity search; save/load to disk",
+      "implementationLocation": "007_rag.ipynb",
+      "implementationSummary": "FAISS from langchain_community.vectorstores, save_local/load_local with allow_dangerous_deserialization"
+    },
+    {
+      "name": "Similarity search",
+      "whatItDoes": "Returns top-k document chunks for a query",
+      "implementationLocation": "rag_doc.py, rag.ipynb, 007_rag.ipynb",
+      "implementationSummary": "vector_store.similarity_search or similarity_search_with_score(query, k=2..4)"
+    },
+    {
+      "name": "RAG agent (retrieve + generate)",
+      "whatItDoes": "Retrieves context then generates answer with LLM",
+      "implementationLocation": "007_rag.ipynb",
+      "implementationSummary": "StateGraph(State) with nodes retrieve and generator; retrieve does similarity_search k=4; generator builds prompt (context + question), invokes init_chat_model('gpt-4.1-nano', 'openai'), returns answer"
+    },
+    {
+      "name": "CLI Q&A loop",
+      "whatItDoes": "Interactive terminal: user types question, system prints top snippets (no LLM answer)",
+      "implementationLocation": "rag_doc.py",
+      "implementationSummary": "while True input loop, similarity_search_with_score(user_query, k=3), print score/page/content; exit on exit/quit/q"
+    }
+  ],
+
+  "technicalChallenges": [],
+
+  "performanceAndSecurity": {
+    "performanceOptimizations": [
+      "Chunk size and overlap tuned for context (1000/150 or 1000/200)",
+      "Top-k limited (3 or 4) to bound context size",
+      "Pinecone serverless for managed scale",
+      "FAISS for local fast ANN"
+    ],
+    "securityConsiderations": [
+      "API keys loaded from environment (load_dotenv)",
+      "No input validation or sanitization on user questions",
+      "FAISS load_local with allow_dangerous_deserialization",
+      "No auth for CLI or notebook; no rate limiting"
+    ],
+    "errorHandling": [
+      "Index existence check before Pinecone create (rag_doc.py)",
+      "No try/except or explicit error handling in analyzed code"
+    ]
+  },
+
+  "visualAndUXDecisions": {
+    "uiPatternsObserved": [
+      "CLI: prompt 'User: ', print snippets with score and page, 250-char content preview",
+      "Notebook: cell-by-cell execution, output of documents and search results in notebook"
+    ],
+    "interactionLogic": [
+      "rag_doc.py: sequential loop (question → print snippets → repeat)",
+      "007_rag.ipynb: graph.invoke({'question': '...'}) returns final state with answer"
+    ]
+  },
+
+  "outcomeAndImpact": {
+    "actualResults": [],
+    "limitations": [
+      "No web UI; Gradio in requirements but not used in analyzed code",
+      "LLM-based answer generation only in 007_rag.ipynb; rag_doc.py and rag.ipynb retrieval-only",
+      "No explicit error handling for missing file, API failure, or empty results",
+      "requirements.txt omits pinecone, python-dotenv, langchain_pinecone",
+      "No deployment or containerization"
+    ]
+  },
+
+  "learnings": [],
+
+  "futureImprovements": []
+}
